@@ -1,0 +1,234 @@
+library(tidyverse)
+
+
+df <- read.table("进化树_合并汇总.txt", 
+                 header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+
+
+data_wide <- df %>%
+  pivot_wider(id_cols = c(phylum, family), names_from = Type, 
+              values_from = total, values_fill = 0)
+
+mat <- as.matrix(data_wide[, c("N", "R", "W")])
+rownames(mat) <- paste0("f_", data_wide$family)
+mat_log <- log1p(mat)
+
+
+hc <- hclust(dist(mat_log), method = "average")
+tree_height <- max(cophenetic(hc))
+n <- nrow(mat)
+hc_order <- hc$order
+phylum_ordered <- data_wide$phylum[hc_order]
+
+
+green_palette <- c(
+  "#F0FFF0",  
+  "#E0F7E0",  
+  "#C8E6C9",  
+  "#A5D6A7",  
+  "#81C784",  
+  "#66BB6A",  
+  "#4CAF50",  
+  "#43A047",  
+  "#388E3C",  
+  "#2E7D32",  
+  "#1B5E20",  
+  "#0D5302",  
+  "#003300"   
+)
+
+
+phylum_counts <- table(phylum_ordered)
+
+phylum_sequence <- names(sort(phylum_counts, decreasing = TRUE))
+
+
+n_phyla <- length(phylum_sequence)
+if(n_phyla <= length(green_palette)) {
+ 
+  indices <- round(seq(length(green_palette), 1, length.out = n_phyla))
+  phylum_colors <- setNames(green_palette[indices], phylum_sequence)
+} else {
+  
+  extended_palette <- colorRampPalette(green_palette)(n_phyla)
+  phylum_colors <- setNames(rev(extended_palette), phylum_sequence)
+}
+
+
+dend <- as.dendrogram(hc)
+
+color_branches <- function(d, order_vec, phylum_vec, color_map) {
+  if(is.leaf(d)) {
+    lab <- attr(d, "label")
+    idx <- which(order_vec == lab)
+    if(length(idx) > 0) {
+      ph <- phylum_vec[idx]
+      attr(d, "edgePar") <- list(col = color_map[ph], lwd = 2)
+    }
+    return(d)
+  }
+  for(i in seq_along(d)) {
+    d[[i]] <- color_branches(d[[i]], order_vec, phylum_vec, color_map)
+  }
+  return(d)
+}
+
+labels_in_order <- rownames(mat)[hc_order]
+dend_colored <- color_branches(dend, labels_in_order, phylum_ordered, phylum_colors)
+
+
+layout(matrix(c(1, 2, 3), nrow = 1), widths = c(4, 1.5, 4))
+
+
+par(mar = c(5, 0, 4, 0))
+
+plot(dend_colored, 
+     horiz = TRUE, 
+     axes = FALSE, 
+     leaflab = "none",
+     hang = -1,
+     xlim = c(0, tree_height * 2.5))
+
+
+for(i in 1:n) {
+  y_pos <- i
+  label <- paste0("f_", data_wide$family[hc_order[i]])
+  if(nchar(label) > 45) label <- paste0(substr(label, 1, 42), "...")
+  
+  segments(x0 = tree_height, y0 = y_pos, 
+           x1 = tree_height * 1.15, y1 = y_pos,
+           lty = 3, col = "gray60", lwd = 0.8)
+  
+  text(x = tree_height * 1.18, y = y_pos, 
+       labels = label, 
+       col = "black", 
+       cex = 1, 
+       adj = c(0, 0.5))
+}
+
+segments(x0 = 0, y0 = n + 2, x1 = tree_height/10, y1 = n + 2, lwd = 2)
+text(x = tree_height/20, y = n + 3, labels = "0.1", cex = 0.8)
+
+
+par(mar = c(5, 0, 4, 4))
+mat_ordered <- mat_log[hc_order, c("N", "R", "W")]
+image(x = 1:3, y = 1:n, z = t(mat_ordered),
+      col = colorRampPalette(c("#f7fcf5", "#74c476", "#238b45", "#00441b"))(50),
+      axes = FALSE)
+axis(1, at = 1:3, labels = c("N", "R", "W"), tick = FALSE, line = 0, font = 2)
+axis(4, at = seq(1, n, length.out = 5), 
+     labels = round(seq(0, max(mat_ordered), length.out = 5), 1), las = 1)
+
+
+par(mar = c(5, 0, 4, 8), xpd = TRUE)
+
+plot.new()
+plot.window(xlim = c(-0.2, 1.5), ylim = c(0.5, n + 0.5))
+
+
+current_y <- 0.5
+phylum_y_ranges <- list()
+
+for(ph in phylum_sequence) {  # phylum_sequence 已经是从大到小排序
+  count <- phylum_counts[ph]
+  phylum_y_ranges[[ph]] <- list(
+    bottom = current_y,
+    top = current_y + count,
+    count = count
+  )
+  current_y <- current_y + count + 0.3  # 间隙
+}
+
+
+for(i in 1:n) {
+  phylum <- phylum_ordered[i]
+  color <- phylum_colors[phylum]
+  
+  y_left <- i
+  range_info <- phylum_y_ranges[[phylum]]
+  
+  
+  indices_in_phylum <- which(phylum_ordered == phylum)
+  rank_in_phylum <- which(indices_in_phylum == i)
+  
+
+  step <- (range_info$top - range_info$bottom) / range_info$count
+  y_right_bottom <- range_info$bottom + (rank_in_phylum - 1) * step
+  y_right_top <- range_info$bottom + rank_in_phylum * step
+  
+  left_width <- 0.12
+  
+  
+  x_seq <- seq(0, 1, length.out = 100)
+  y_top_spline <- spline(x = c(0, 1), y = c(y_left + left_width, y_right_top), 
+                         xout = x_seq, method = "natural")$y
+  y_bottom_spline <- spline(x = c(0, 1), y = c(y_left - left_width, y_right_bottom), 
+                            xout = x_seq, method = "natural")$y
+  
+
+  polygon(c(x_seq, rev(x_seq)), c(y_top_spline, rev(y_bottom_spline)), 
+          col = adjustcolor(color, alpha.f = 0.5), border = NA)
+}
+
+
+for(i in 1:n) {
+  segments(x0 = 0, y0 = i - 0.1, x1 = 0, y1 = i + 0.1, 
+           col = phylum_colors[phylum_ordered[i]], lwd = 3)
+}
+
+
+for(ph in phylum_sequence) {
+  range_info <- phylum_y_ranges[[ph]]
+  color <- phylum_colors[ph]
+  
+
+  rect(xleft = 0.9, ybottom = range_info$bottom, 
+       xright = 1.0, ytop = range_info$top,
+       col = color, border = "black", lwd = 2)
+  text(x = 1.05, y = (range_info$bottom + range_info$top)/2, 
+       labels = ph, 
+       col = color, 
+       cex = 0.85, 
+       adj = c(0, 0.5), 
+       font = 2)
+}
+
+par(xpd = FALSE)
+
+print("完成：绿色配色 + 从大到小从下到上排列")
+par(mar = c(4, 0, 0, 0), xpd = FALSE)  # 上边距0，紧贴热图下方；下边距4留刻度
+
+plot.window(xlim = c(0, 1), ylim = c(0, 1))
+
+z_min <- min(mat_ordered)
+z_max <- max(mat_ordered)
+ncolors <- 50
+colors_vec <- heatmap_colors
+
+
+bar_height <- 0.25
+bar_y <- 0.6
+left_x <- 0.1
+right_x <- 0.9
+bar_width_total <- right_x - left_x
+segment_width <- bar_width_total / ncolors
+
+for(i in 1:ncolors) {
+  x_left <- left_x + (i-1) * segment_width
+  x_right <- left_x + i * segment_width
+  rect(xleft = x_left, ybottom = bar_y - bar_height/2, 
+       xright = x_right, ytop = bar_y + bar_height/2,
+       col = colors_vec[i], border = NA)
+}
+
+
+rect(xleft = left_x, ybottom = bar_y - bar_height/2, 
+     xright = right_x, ytop = bar_y + bar_height/2, 
+     border = "black", lwd = 1)
+
+
+axis_labels <- round(seq(z_min, z_max, length.out = 5), 1)
+axis_positions <- seq(left_x, right_x, length.out = 5)
+
+axis(side = 1, at = axis_positions, labels = axis_labels, 
+     las = 1, cex.axis = 0.9, tick = TRUE, line = 0.5)
