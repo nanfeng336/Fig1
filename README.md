@@ -6,9 +6,8 @@ library(scales)
 library(grid)
 library(gridExtra)
 
-# 2. 读取和处理数据
-# ----------------------------------------------------------------------------
-# 病毒科数据
+
+
 virus_data <- data.frame(
   Family = c("Asfarviridae", "Corticoviridae", "Inoviridae", "Iridoviridae", 
              "Lavidaviridae", "Mimiviridae", "Phycodnaviridae", "Tectiviridae", "Unclassified"),
@@ -25,7 +24,7 @@ virus_data <- data.frame(
   W3 = c(19.647, 115.595, 24185.6037, 18479.929, 68.5909, 1959.8854, 1947.9552, 0, 5588555.781)
 )
 
-# Shannon多样性数据
+
 shannon_data <- data.frame(
   Sample = c("N1", "N2", "N3", "Re", "R1", "R2", "R3", "We", "W1", "W2", "W3"),
   Shannon = c(9.295591, 9.306378, 9.194032, 8.871925, 8.807752, 8.488196, 6.765096, 8.776596, 7.904375, 8.954394, 8.374754),
@@ -33,13 +32,11 @@ shannon_data <- data.frame(
   Group = c("N", "N", "N", "R", "R", "R", "R", "W", "W", "W", "W")
 )
 
-# 3. 设置样本顺序
-# ----------------------------------------------------------------------------
+
 sample_order <- c("N1", "N2", "N3", "Re", "R1", "R2", "R3", "We", "W1", "W2", "W3")
 shannon_data$Sample <- factor(shannon_data$Sample, levels = sample_order)
 
-# 4. 计算病毒科相对丰度
-# ----------------------------------------------------------------------------
+
 virus_relative <- virus_data %>%
   pivot_longer(cols = -Family, 
                names_to = "Sample", 
@@ -50,8 +47,7 @@ virus_relative <- virus_data %>%
 
 virus_relative$Sample <- factor(virus_relative$Sample, levels = sample_order)
 
-# 5. 准备病毒科堆叠数据（带断点）
-# ----------------------------------------------------------------------------
+
 virus_complete <- virus_relative %>%
   group_by(Sample) %>%
   arrange(Relative_Abundance) %>%  # 按丰度升序排列
@@ -61,24 +57,22 @@ virus_complete <- virus_relative %>%
   ) %>%
   ungroup()
 
-# 6. 设置颜色
-# ----------------------------------------------------------------------------
+
 specified_colors <- c("#fb6a4b", "#fcbca1", "#fdbb84", "#9fcbe2", 
                       "#bbbddc", "#9e9bc1", "#4292c7", "#acde8b", "#cdcdcd")
 
-# 设置病毒科顺序
+
 family_order <- c("Asfarviridae", "Corticoviridae", "Inoviridae", "Iridoviridae", 
                   "Lavidaviridae", "Mimiviridae", "Phycodnaviridae", "Tectiviridae", "Unclassified")
 
 virus_complete$Family <- factor(virus_complete$Family, levels = family_order)
 
-# 创建颜色映射
+
 family_colors <- setNames(specified_colors, family_order)
 
-# 7. 创建带断点的病毒科柱状图（左侧）
-# ----------------------------------------------------------------------------
+
 p_virus <- ggplot(virus_complete, aes(y = Sample)) +
-  # 绘制所有病毒的堆叠柱状图
+ 
   geom_rect(
     aes(
       xmin = Start_Position,
@@ -88,8 +82,8 @@ p_virus <- ggplot(virus_complete, aes(y = Sample)) +
       fill = Family
     )
   ) +
-  scale_fill_manual(values = family_colors, name = "病毒科") +
-  # 添加断点：在1%和99.5%之间
+  scale_fill_manual(values = family_colors, name = "family") +
+ 
   scale_x_break(c(1, 99.5), scales = 0.8) +
   scale_x_continuous(
     breaks = c(0, 0.5, 1, 99.5, 99.75, 100),
@@ -97,13 +91,13 @@ p_virus <- ggplot(virus_complete, aes(y = Sample)) +
     expand = expansion(mult = c(0, 0.05))
   ) +
   scale_y_discrete(
-    limits = rev(levels(virus_relative$Sample)),  # 反转顺序，使N1在顶部
+    limits = rev(levels(virus_relative$Sample)), 
     expand = expansion(mult = c(0.05, 0.05))
   ) +
   labs(
-    title = "病毒科相对丰度分布",
-    x = "相对丰度 (%)",
-    y = "样本"
+    title = "virus relative abundance ",
+    x = "relative abundance (%)",
+    y = "sample"
   ) +
   theme_minimal(base_size = 12) +
   theme(
@@ -111,24 +105,23 @@ p_virus <- ggplot(virus_complete, aes(y = Sample)) +
     axis.text.x = element_text(color = "black"),
     axis.title = element_text(face = "bold"),
     plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
-    legend.position = "none",  # 移除图例
+    legend.position = "none",  
     panel.grid.major.x = element_blank(),
     panel.grid.minor.x = element_blank(),
     panel.grid.major.y = element_line(color = "gray90", size = 0.2),
     panel.border = element_rect(color = "gray", fill = NA, size = 0.5),
     plot.margin = unit(c(0.5, 0, 0.5, 0.5), "cm")
   ) +
-  # 添加分组标签
-  annotate("text", x = -0.05, y = "N2", label = "N组", 
+  
+  annotate("text", x = -0.05, y = "N2", label = "N", 
            size = 4, fontface = "bold", color = "blue", hjust = 1) +
-  annotate("text", x = -0.05, y = "R2", label = "R组", 
+  annotate("text", x = -0.05, y = "R2", label = "R", 
            size = 4, fontface = "bold", color = "darkgreen", hjust = 1) +
-  annotate("text", x = -0.05, y = "W2", label = "W组", 
+  annotate("text", x = -0.05, y = "W2", label = "W", 
            size = 4, fontface = "bold", color = "darkred", hjust = 1) +
   coord_cartesian(xlim = c(0, 100), clip = "off")
 
-# 8. 创建Shannon多样性柱状图（右侧）
-# ----------------------------------------------------------------------------
+-
 p_shannon <- ggplot(shannon_data, aes(y = Sample, x = Shannon)) +
   geom_bar(stat = "identity", fill = "#FF8C00", width = 0.7) +
   geom_text(aes(label = round(Shannon, 2)), hjust = -0.2, size = 3.5) +
@@ -138,12 +131,12 @@ p_shannon <- ggplot(shannon_data, aes(y = Sample, x = Shannon)) +
     expand = expansion(mult = c(0, 0.1))
   ) +
   scale_y_discrete(
-    limits = rev(levels(shannon_data$Sample)),  # 与病毒科图保持一致
+    limits = rev(levels(shannon_data$Sample)),  
     expand = expansion(mult = c(0.05, 0.05))
   ) +
   labs(
-    title = "Shannon多样性指数",
-    x = "Shannon多样性指数",
+    title = "Shannon index",
+    x = "Shannon index",
     y = ""
   ) +
   theme_minimal(base_size = 12) +
